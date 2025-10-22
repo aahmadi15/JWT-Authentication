@@ -1,20 +1,30 @@
-import http from 'http'
-import fsp from 'fsp'
 import jwt from 'jsonwebtoken'
 import bcrypt from 'bcrypt'
 import {config} from 'dotenv'
 import express from 'express'
-import ejs from 'ejs';
 import cors from 'cors';
+
 //import {generateAccessToken, authenticateToken} from 'authServer.js'
 
 import {mongoose} from 'mongoose'
 
+
 const app = express()
 
-app.set('view-engine', 'ejs')
-app.use(express.static('public'));
-app.use(cors());
+var corsOptions = {
+    origin: 'http://localhost:3000'
+}
+
+
+app.options('*', cors(corsOptions)) 
+app.use(cors(corsOptions));
+app.use(function(req,res, next){
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS, DELETE");
+    res.setHeader("Access-Control-Allow-Headers", "X-Requested-With, Access-Control-Allow-Headers, Content-Type, Authorization, Origin, Accept");
+    res.setHeader('Access-Control-Allow-Credentials', true)
+     next();
+})
 
 mongoose.connect('mongodb://localhost:27017/tokens').then(()=>{
     console.log("mongodb connected")    
@@ -31,8 +41,8 @@ const newUser = new mongoose.model("users", token)
  
 const secret = process.env.JWT_SECRET_KEY;
 
-let passcredential
-let usercredential
+let passcredential;
+let usercredential;
 let hashedPassword
 let passwordToString;
 let accessToken
@@ -48,16 +58,13 @@ app.use(express.json());
 
 config({path: ".env"});
 
-app.get('/', (req, res) => {
-    res.render('register.ejs'); 
-});
-
-app.get('/login', (req,res)=>{
-    res.render('login.ejs')
-})
 
 app.get('/register', (req,res)=>{
-    res.render('register.ejs')
+    console.log ('weeee')
+})
+
+app.get('/login', (req, res)=>{
+    console.log('welcome')
 })
 
 /*app.get('/posts', authenticateToken, (req, res) =>{
@@ -65,32 +72,43 @@ app.get('/register', (req,res)=>{
 })*/
 
 app.post('/register', async (req, res) =>{
-    try{
+    
 // will try putting the above in authserver declaration
         //const coll = await user.collection.countDocuments();
         //console.log(coll)
-                passcredential = req.body.password
+            
+            //const {username, password, error} = req.body;
+
+            //console.log(data)
+                usercredential = req.body.username;
+                passcredential = req.body.password;
+                let errorMessage = req.body.error;
+                console.log (usercredential)
+                console.log(passcredential)
                 passwordToString = passcredential.toString()
-                usercredential = req.body.email
-                const existUser = await newUser.findOne({username: req.body.email})
-                const existPass = await newUser.findOne({password: req.body.password})
+                const existUser = await newUser.findOne({username: usercredential})
+                const existPass = await newUser.findOne({password: passcredential})
                 console.log(existUser)
-                console.log(req.body.email)
-               if ((!existUser) && (!existPass))
+
+               if ((existUser) && (existPass))
                {
-                    //console.log(user)
-                    //await user.save();
-                    console.log(req.body.email)
-                    console.log(existUser)
-                    console.log(existPass)
-                    res.redirect('/login')
-                    //console.log(coll);
+                    errorMessage = 'An error was not found';
+                    console.log(errorMessage)
+                    res.status(200).send(errorMessage)
+                    //res.redirect('/login')
                }
-               else{
-                   throw new Error ('user or password already exists');   
-                }               
-    }
-    catch(error){
+               if ((existUser) && (!existPass))
+               {
+                    errorMessage = `Password not recognized`
+                    console.log(errorMessage)
+                    res.status(200).send(errorMessage)                      
+               }
+              else{
+                    errorMessage = 'An error was found';
+                                        console.log(errorMessage)
+                    res.status(200).send(errorMessage)
+                }               }
+    /*catch(error){
         res.writeHead(500, {'Content-Type': 'text/plain'})
         console.log(error)
         // this just ends the session with an error - we dont want that - res.end('Server Error');
@@ -99,18 +117,19 @@ app.post('/register', async (req, res) =>{
     /*catch{
         res.redirect('/register')
     }*/
-})
+)
 
 
 app.post('/login', async (req,res)=>{
     //const {usercredential, passcredential} = req.body;
-        console.log (usercredential)
+    console.log (usercredential)
     console.log(passcredential)
     const check = await newUser.findOne({ username: req.body.username });
     /*if (!check) {
         return res.status(400).send('Cannot find user');
     }*/
-
+    usercredential = req.body.username;
+    passcredential = req.body.password;
     const salt = await bcrypt.genSalt(10)
     console.log(salt);
 
@@ -177,6 +196,7 @@ function authenticateToken(req,res,nex){
         next() // move on with middleware
     }) 
 }
+
 
 app.listen(`${process.env.PORT}`, ()=>{
     console.log(`server is running at http://localhost:${process.env.PORT}`);
