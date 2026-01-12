@@ -4,4 +4,4 @@ This project is strictly done to measure progress.
 
 UPDATE 2026-01-11
 
-I've since updated this program and it retains functionality on the backend with react implementation.  It gets to the login screen and will authenticate via Node JS - that's as far as I've reached so far.
+I've since updated this program and it retains functionality on the backend with react implementation.  It gets to the login screen and will authenticate via Node JS - that's as far as I've reached so far.  I may come back to finish and implement a registration page with a welcome screen on successful login.
