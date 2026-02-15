@@ -14,7 +14,7 @@ const app = express()
 var corsOptions = {
     origin: 'http://localhost:3000'
 }
-
+app.use(express.json());
 
 app.options('*', cors(corsOptions)) 
 app.use(cors(corsOptions));
@@ -71,15 +71,7 @@ app.get('/login', (req, res)=>{
     res.json(posts.filter(post => post.username === req.user.name));
 })*/
 
-app.post('/register', async (req, res) =>{
-    
-// will try putting the above in authserver declaration
-        //const coll = await user.collection.countDocuments();
-        //console.log(coll)
-            
-            //const {username, password, error} = req.body;
-
-            //console.log(data)
+app.post('/login', async (req, res) =>{
                 usercredential = req.body.username;
                 passcredential = req.body.password;
                 let errorMessage = req.body.error;
@@ -87,47 +79,46 @@ app.post('/register', async (req, res) =>{
                 console.log(passcredential)
                 passwordToString = passcredential.toString()
                 const existUser = await newUser.findOne({username: usercredential})
-                const existPass = await newUser.findOne({password: passcredential})
                 console.log(existUser)
 
-               if ((existUser) && (existPass))
+        try {     
+                if (!usercredential && !passcredential )
                {
-                    errorMessage = 'An error was not found';
-                    console.log(errorMessage)
-                    res.status(200).send(errorMessage)
+                    console.log(usercredential)
+                    console.log(passcredential)
+                    return res.status(400).json({message: "Empty field - try again"})                      
+               }   
                     //res.redirect('/login')
-               }
-               if ((existUser) && (!existPass))
+               if (!existUser) {
+                return res.status(400).json({message: "user does not exist"});
+              }
+              const passMatch = await bcrypt.compare(passcredential, existUser.password) //place this due to logic error in case no user is entered causing issue with crash
+            if (passcredential == null){
+
+            }
+               if (!passMatch)
                {
                     errorMessage = `Password not recognized`
                     console.log(errorMessage)
-                    res.status(200).send(errorMessage)                      
+                    return res.status(400).json({message: "password not recognized"})                      
                }
-              else{
-                    errorMessage = 'An error was found';
-                                        console.log(errorMessage)
-                    res.status(200).send(errorMessage)
-                }               }
-    /*catch(error){
-        res.writeHead(500, {'Content-Type': 'text/plain'})
+
+                   return res.status(200).json({message: "user exists"})
+                }       
+    catch(error){
         console.log(error)
-        // this just ends the session with an error - we dont want that - res.end('Server Error');
-        res.redirect('/login')
+        return res.status(500).json({message: "Server error"});
     }
-    /*catch{
-        res.redirect('/register')
-    }*/
-)
+})
 
 
-app.post('/login', async (req,res)=>{
+app.post('/register', async (req,res)=>{
     //const {usercredential, passcredential} = req.body;
-    console.log (usercredential)
-    console.log(passcredential)
+    
     const check = await newUser.findOne({ username: req.body.username });
-    /*if (!check) {
-        return res.status(400).send('Cannot find user');
-    }*/
+    if (check){
+        return res.status(400).json({message: "User already exists"})
+    }
     usercredential = req.body.username;
     passcredential = req.body.password;
     const salt = await bcrypt.genSalt(10)
@@ -140,16 +131,16 @@ app.post('/login', async (req,res)=>{
 
    const user = new newUser({
     username : usercredential,
-    password : hashedPassword,
-    accessToken: accessToken
+    password : hashedPassword
+    //removed accessToken from usermodel as JWT supposed to be stateless
 });
 
     await user.save().then(()=>{
         console.log('User saved!');
     })
   
-    //return res.json(accessToken)
-    res.json({success:true, token: 'JWT '+ token, user : {username: usercredential,
+    res.json(accessToken)
+    return res.json({success:true, token: 'JWT '+ token, user : {username: usercredential,
             password: hashedPassword,
             accessToken: accessToken}
     })
