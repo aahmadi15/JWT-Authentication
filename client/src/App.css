@@ -21,6 +21,11 @@ code {
   font-family: 'Franklin Gothic Medium', 'Arial Narrow', Arial, sans-serif;
 }
 
+.inputs {
+  margin: 0 auto;
+  
+}
+
 .navStyle a:hover{
     background-color: #7093b6;
     color: black;

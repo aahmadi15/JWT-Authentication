@@ -37,7 +37,7 @@ catch(error) {
     return (
         <form onSubmit={handleOnSubmit}>
         <div className = "container">
-            <div className = 'container'>
+            
         <div className="header">
             <div className="text">Register</div>
         </div>
@@ -57,7 +57,7 @@ catch(error) {
     </div>
 
 
-        </div>
+    
         </form>
     )
 }
