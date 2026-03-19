@@ -61,7 +61,7 @@ catch(error) {
             
             
             <div className ="forgetPassword"> Lost Password {" "}
-                <Link to = "/register">
+                <Link to = "/forgotPassword">
                 <span>Click Here</span>
                 </Link>
             </div>

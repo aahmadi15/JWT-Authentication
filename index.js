@@ -5,7 +5,8 @@ import express from 'express'
 import cors from 'cors';
 import cookieParser from 'cookie-parser'
 //import {generateAccessToken, authenticateToken} from 'authServer.js'
-
+import crypto from "crypto"
+import nodemailer from 'nodemailer'
 import {mongoose} from 'mongoose'
 
 
@@ -27,6 +28,17 @@ app.use(function(req,res, next){
     res.setHeader('Access-Control-Allow-Credentials', true)
      next();
 })
+
+const verifyMail = async () => {
+    try {
+        let transporter = nodemailer.createTransport({
+            service:"hotmail",
+            auth:{
+                user: usercredential
+            }
+        })
+    }
+}
 
 mongoose.connect('mongodb://localhost:27017/tokens').then(()=>{
     console.log("mongodb connected")    
@@ -67,15 +79,14 @@ app.get('/dashboard', authenticateToken, (req, res) => {
 })*/
 
 app.post('/login', async (req, res) =>{
-let accessToken;
 
                 let usercredential = req.body.username;
                 let passcredential = req.body.password;
-                let passwordToString
+            
                 let errorMessage = req.body.error;
                 console.log (usercredential)
                 console.log(passcredential)
-                passwordToString = passcredential.toString()
+                let passwordToString = passcredential.toString()
                 const existUser = await newUser.findOne({username: usercredential})
                 console.log(existUser)
 
@@ -97,8 +108,17 @@ let accessToken;
                     console.log(errorMessage)
                     return res.status(400).json({message: "password not recognized"})                      
                }
-                    accessToken = accessMyToken(usercredential);
+               
+                    if (existUser.refreshToken)
+                    {
+                        existUser.refreshToken = null;
+                        await existUser.save()
+                    }
+                    const {accessToken, refreshToken} = accessMyToken(existUser._id);
                     console.log(accessToken);
+
+                existUser.refreshToken = refreshToken;
+                await existUser.save();
 
             const options = {
                 expires: new Date(Date.now() + 3 * 24 *60 *60 * 1000),
@@ -107,21 +127,12 @@ let accessToken;
                 sameSite: "strict"
             };
 
-            const refreshToken = jwt.sign({
-                username: existUser.usercredential,
-            }, process.env.JWT_SECRET_KEY, {expiresIn: '1d'});
 
-            
-            existUser.refreshToken = refreshToken;
-            await existUser.save();
-
-            res.cookie("refreshToken", refreshToken, {
-                options
-            });
+            res.cookie("refreshToken", refreshToken, options
+            );
 
             res.status(200).json({message: "logged in", accessToken,
                         user: {
-                            id: existUser._id,
                             username: existUser.username}
         })
         
@@ -194,11 +205,42 @@ function accessMyToken(usercredential){
     
     /*return jwt.sign({userId: usercredential, pass:passcredential}, process.env.JWT_SECRET_KEY, {expiresIn: '604800'});*/
     // Apparently this is bad practise for security purposes adding password as it can be uncoded and fetched.
-    return jwt.sign(
+    const accessToken = jwt.sign(
         {userId: usercredential},
         process.env.JWT_SECRET_KEY,
         {expiresIn: '604800' })
+    const refreshToken = jwt.sign(
+        {usercredential}, 
+        process.env.JWT_SECRET_KEY,
+        {expiresIn: "4d"}
+    )
+    return {accessToken, refreshToken};
 }
+
+app.post('/forgotPassword', async (req, res )=>{
+    const {password, username} = req.body;
+
+    if (!username || !password)
+        return res.status(400).json({message: "Empty fields"})
+    try {
+        const user = await newUser.findOne({username})
+        if (!user) return res.status(404).json({message: "User doesn't exist"});
+       
+        const salt = await bcrypt.genSalt(10);
+        user.password = await bcrypt.hash(password, salt)
+        await user.save();
+    
+    res.status(200).json(
+        {message: "Password reset successfully"}
+    );
+
+    }
+    catch (error){
+        console.log('Error', error.message)
+        res.status(500).json({message: "something went wrong"})
+    }
+    
+});
 
 app.post('/token', (req,res) => {
     try {
