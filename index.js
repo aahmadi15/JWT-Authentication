@@ -1,17 +1,21 @@
+import 'dotenv/config'; // ← loads .env before anything else, ES module safe
+
 import jwt from 'jsonwebtoken'
 import bcrypt from 'bcrypt'
-import {config} from 'dotenv'
 import express from 'express'
 import cors from 'cors';
 import cookieParser from 'cookie-parser'
-//import {generateAccessToken, authenticateToken} from 'authServer.js'
 import crypto from "crypto"
 import nodemailer from 'nodemailer'
-import {mongoose} from 'mongoose'
+import { mongoose } from 'mongoose'
+import { Resend } from 'resend';
 
-
-const app = express()
-
+// Now process.env is available
+console.log('SECRET:', process.env.JWT_SECRET_KEY?.slice(0, 10));
+console.log('REFRESH:', process.env.JWT_REFRESH_TOKEN?.slice(0, 10));
+console.log('ENV PATH:', process.cwd());
+const resend = new Resend(process.env.RESEND_API_KEY);
+const app = express();
 var corsOptions = {
     origin: 'http://localhost:3000',
     credentials: true
@@ -21,24 +25,20 @@ app.use(cookieParser());
 
 app.options('*', cors(corsOptions)) 
 app.use(cors(corsOptions));
-app.use(function(req,res, next){
-    res.setHeader("Access-Control-Allow-Origin", "*");
-    res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS, DELETE");
-    res.setHeader("Access-Control-Allow-Headers", "X-Requested-With, Access-Control-Allow-Headers, Content-Type, Authorization, Origin, Accept");
-    res.setHeader('Access-Control-Allow-Credentials', true)
-     next();
-})
 
-const verifyMail = async () => {
-    try {
-        let transporter = nodemailer.createTransport({
-            service:"hotmail",
-            auth:{
-                user: usercredential
-            }
-        })
-    }
-}
+const verifyMail = async (userEmail, reset) => {
+    
+        const {error} = await resend.emails.send({
+            from:    'Auth App <onboarding@resend.dev>',
+            to:      userEmail,
+            subject: 'Password Reset',
+            html: `<div><a href="${reset}">Click here to reset password</a></div>`,
+        });
+
+        // Open this URL in your browser to see the email
+        if (error) throw new Error(error.message);
+        console.log('Mail sent success')
+    };
 
 mongoose.connect('mongodb://localhost:27017/tokens').then(()=>{
     console.log("mongodb connected")    
@@ -48,8 +48,10 @@ mongoose.connect('mongodb://localhost:27017/tokens').then(()=>{
 const token = new mongoose.Schema({
     username: {type:String, unique: true, required: true},
     password: {type:String, required: true},
-    refreshToken: {type: String}
-    //accessToken: {type:String, required: true}
+    refreshToken: {type: String},
+    resetToken: {type: String},
+    resetTokenExpiry: {type: Date},
+    //JWTs need to be stateless - accessToken: {type:String, required: true}
 });
 
 const newUser = new mongoose.model("users", token)
@@ -57,9 +59,6 @@ const newUser = new mongoose.model("users", token)
 const secret = process.env.JWT_SECRET_KEY;
 
 app.use(express.urlencoded({extended:false}))
-app.use(express.json());
-
-config({path: ".env"});
 
 
 app.get('/register', (req,res)=>{
@@ -87,16 +86,15 @@ app.post('/login', async (req, res) =>{
                 console.log (usercredential)
                 console.log(passcredential)
                 let passwordToString = passcredential.toString()
-                const existUser = await newUser.findOne({username: usercredential})
-                console.log(existUser)
 
         try {     
                 if (!usercredential || !passcredential )
                {
                     console.log(usercredential)
-                    console.log(passcredential)
                     return res.status(400).json({message: "Empty fields - try again"})                      
                }   
+               const existUser = await newUser.findOne({username: usercredential})
+                console.log(existUser)
                     //res.redirect('/login')
                if (!existUser) {
                 return res.status(400).json({message: "user does not exist"});
@@ -114,12 +112,12 @@ app.post('/login', async (req, res) =>{
                         existUser.refreshToken = null;
                         await existUser.save()
                     }
-                    const {accessToken, refreshToken} = accessMyToken(existUser._id);
+                    const {accessToken, refreshToken} = accessMyToken(existUser);
                     console.log(accessToken);
 
                 existUser.refreshToken = refreshToken;
                 await existUser.save();
-
+            
             const options = {
                 expires: new Date(Date.now() + 3 * 24 *60 *60 * 1000),
                 httpOnly: true,
@@ -163,7 +161,6 @@ app.post('/register', async (req,res)=>{
                 if (!usercredential?.trim() && !passcredential?.trim())
                {
                     console.log(usercredential)
-                    console.log(passcredential)
                     return res.status(400).json({message: "Empty fields - try again"})                      
                }   
                     //res.redirect('/login')
@@ -176,9 +173,9 @@ app.post('/register', async (req,res)=>{
     
     const user = new newUser({
     username : usercredential,
-    //password : hashedPassword
+    password : hashedPassword,
     //removed accessToken from usermodel as JWT supposed to be stateless
-    refreshToken: refreshToken
+    refreshToken: null
 });
 
     await user.save().then(()=>{
@@ -187,7 +184,6 @@ app.post('/register', async (req,res)=>{
 
     return res.status(201).json({
         message: "User Registered successfully",
-        token: accessToken,
         user:{
             username: usercredential,
             password: hashedPassword
@@ -202,36 +198,43 @@ app.post('/register', async (req,res)=>{
     }})
 
 function accessMyToken(usercredential){
-    
+    console.log('SECRET inside accessMyToken:', process.env.JWT_SECRET_KEY?.slice(0, 10));
+    console.log('REFRESH inside accessMyToken:', process.env.JWT_REFRESH_TOKEN?.slice(0, 10));
     /*return jwt.sign({userId: usercredential, pass:passcredential}, process.env.JWT_SECRET_KEY, {expiresIn: '604800'});*/
     // Apparently this is bad practise for security purposes adding password as it can be uncoded and fetched.
     const accessToken = jwt.sign(
         {userId: usercredential},
         process.env.JWT_SECRET_KEY,
-        {expiresIn: '604800' })
+        {expiresIn: '15m' })
     const refreshToken = jwt.sign(
         {usercredential}, 
-        process.env.JWT_SECRET_KEY,
-        {expiresIn: "4d"}
+        process.env.JWT_REFRESH_TOKEN,
+        {expiresIn: "7d"}
     )
     return {accessToken, refreshToken};
 }
 
 app.post('/forgotPassword', async (req, res )=>{
-    const {password, username} = req.body;
+    const {username} = req.body;
 
-    if (!username || !password)
-        return res.status(400).json({message: "Empty fields"})
+    if (!username)
+        return res.status(400).json({message: "Empty field"})
     try {
         const user = await newUser.findOne({username})
-        if (!user) return res.status(404).json({message: "User doesn't exist"});
-       
-        const salt = await bcrypt.genSalt(10);
-        user.password = await bcrypt.hash(password, salt)
-        await user.save();
+        if (!user) return res.status(200).json({message: "If the user exists a reset has been sent"});
     
-    res.status(200).json(
-        {message: "Password reset successfully"}
+        //user.password = await bcrypt.hash(password, salt)
+        const rawToken = crypto.randomBytes(32).toString('hex');
+        const hashedToken = crypto.createHash('sha256').update(rawToken).digest('hex');
+
+        user.resetToken = hashedToken;
+        user.resetTokenExpiry = Date.now() + 15 * 60 * 1000;
+        await user.save();
+        const reset = `http://localhost:3000/resetPassword?token=${rawToken}`
+
+        await verifyMail(user.email, reset);
+    return res.status(200).json(
+        {message: "If the user exists a reset has been sent"}
     );
 
     }
@@ -241,6 +244,37 @@ app.post('/forgotPassword', async (req, res )=>{
     }
     
 });
+
+app.post('/resetPassword', async (req, res) => {
+    const {token, password} = req.body;
+
+    if (!token || !password){
+        return res.status(400).json({message: 'token and password are required'})
+    }
+
+    try {
+        const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
+        const user = await newUser.findOne({
+            resetToken: hashedToken,
+            resetTokenExpiry: {$gt: Date.now()},
+        });
+        if (!user){
+            return res.status(400).json({message: 'token is invalid or has expired'})
+        }
+
+        const salt = await bcrypt.genSalt(10);
+        user.password = await bcrypt.hash(password, salt);
+        user.resetToken = undefined;
+        user.resetTokenExpiry = undefined;
+        await user.save();
+
+        return res.status(200).json({message: 'Password has been reset successfully.'})
+    }
+    catch(error){
+        console.log('Error:', error.message);
+        return res.status(500).json({message: 'something went wrong'});
+    }
+})
 
 app.post('/token', (req,res) => {
     try {

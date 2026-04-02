@@ -1,35 +1,36 @@
-import React, {Navigate, useState} from 'react'
+import {useState} from 'react'
 import './LoginSignup.css'
-
+import {useSearchParams} from 'react-router-dom'
 
 export default function ResetPassword (){
-    const [username, setUser] = useState('');
-            const [password, setPassword] = useState('');
-            const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
+            const [username, setUsername] = useState('');
+            const [error, setError] = useState('');
     const handleOnSubmit = async(event) =>{
         event.preventDefault();
+        setError('');
+        setSuccess('');
 
         try{
-            const result = await fetch('http://localhost:4000/forgotPassword', {
+            const result = await fetch(`http://localhost:4000/forgotPassword`, {
                 method: "post",
-                body: JSON.stringify({username, password}),
+                body: JSON.stringify({username}),
                 headers: {
                     'Content-Type': 'application/json'
                 }
             })
             const data = await result.json();
 
-            if (!result.ok)
+    if (!result.ok)
     {
-        setSuccess(data.message);
+        setError(data.message);
         return;
     }
     setSuccess('Password Reset Successfully')
     }
 catch(error) {
         
-        setError(error)
+        setError(error.message)
     }
     }
     return (
@@ -40,13 +41,10 @@ catch(error) {
             <div className="text">Reset</div>
         </div>
         <div className="inputs">
-            <div className="username">
-              <input name='user' type="text" placeholder='username' onChange={(e)=> {setUser(e.target.value)}}/>
-            </div>
-
-             <div className="new-password">
+              <input name='user' type="text" placeholder='username' onChange={(e)=> {setUsername(e.target.value)}}/>
+             {/* ... <div className="new-password">
               <input name='newpass' type="password" placeholder='New Password' onChange={(e)=> {setPassword(e.target.value)}}/>
-            </div>
+            </div> */}
             <input type="submit" value= "Submit"/>
             </div>
             
@@ -57,7 +55,3 @@ catch(error) {
     </form>
     )
 }
-
-
-
-export {ResetPassword};
