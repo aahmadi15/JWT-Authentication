@@ -1,6 +1,5 @@
 import {useState} from 'react'
 import './LoginSignup.css'
-import {useSearchParams} from 'react-router-dom'
 
 export default function ResetPassword (){
     const [success, setSuccess] = useState('');

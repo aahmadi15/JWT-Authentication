@@ -6,9 +6,10 @@ import express from 'express'
 import cors from 'cors';
 import cookieParser from 'cookie-parser'
 import crypto from "crypto"
-import nodemailer from 'nodemailer'
 import { mongoose } from 'mongoose'
 import { Resend } from 'resend';
+
+import nodemailer from 'nodemailer'
 
 // Now process.env is available
 console.log('SECRET:', process.env.JWT_SECRET_KEY?.slice(0, 10));
@@ -27,18 +28,26 @@ app.options('*', cors(corsOptions))
 app.use(cors(corsOptions));
 
 const verifyMail = async (userEmail, reset) => {
-    
-        const {error} = await resend.emails.send({
-            from:    'Auth App <onboarding@resend.dev>',
-            to:      userEmail,
-            subject: 'Password Reset',
-            html: `<div><a href="${reset}">Click here to reset password</a></div>`,
-        });
+    const testAccount = await nodemailer.createTestAccount();
+    const transporter = nodemailer.createTransport({
+        host:   'smtp.ethereal.email',
+        port:   587,
+        secure: false,
+        auth: {
+            user: testAccount.user,
+            pass: testAccount.pass,
+        },
+    });
 
-        // Open this URL in your browser to see the email
-        if (error) throw new Error(error.message);
-        console.log('Mail sent success')
-    };
+    const info = await transporter.sendMail({
+        from:    '"Auth App" <no-reply@authapp.com>',
+        to:      userEmail,
+        subject: 'Password Reset',
+        html:    `<div><a href="${reset}">Click here to reset password</a></div>`,
+    });
+
+    console.log('Preview URL:', nodemailer.getTestMessageUrl(info));
+};
 
 mongoose.connect('mongodb://localhost:27017/tokens').then(()=>{
     console.log("mongodb connected")    
@@ -144,21 +153,17 @@ app.post('/login', async (req, res) =>{
 
 
 app.post('/register', async (req,res)=>{
-    //const {usercredential, passcredential} = req.body;
+    const usercredential = req.body.username;
+    const passcredential = req.body.password;
     
     const check = await newUser.findOne({ username: req.body.username });
     if (check){
         return res.status(400).json({message: "User already exists"})
     }
-    usercredential = req.body.username;
-    passcredential = req.body.password;
-    const salt = await bcrypt.genSalt(10)
-    console.log(salt);
-    
 
 
     try {     
-                if (!usercredential?.trim() && !passcredential?.trim())
+                if (!usercredential?.trim() || !passcredential?.trim())
                {
                     console.log(usercredential)
                     return res.status(400).json({message: "Empty fields - try again"})                      
@@ -202,12 +207,14 @@ function accessMyToken(usercredential){
     console.log('REFRESH inside accessMyToken:', process.env.JWT_REFRESH_TOKEN?.slice(0, 10));
     /*return jwt.sign({userId: usercredential, pass:passcredential}, process.env.JWT_SECRET_KEY, {expiresIn: '604800'});*/
     // Apparently this is bad practise for security purposes adding password as it can be uncoded and fetched.
+    console.log('signing for _id:', usercredential._id);
+    console.log('access token:', jwt.sign({ userId: usercredential._id }, process.env.JWT_SECRET_KEY, { expiresIn: '15m' }));
     const accessToken = jwt.sign(
-        {userId: usercredential},
+        {userId: usercredential._id},
         process.env.JWT_SECRET_KEY,
         {expiresIn: '15m' })
     const refreshToken = jwt.sign(
-        {usercredential}, 
+        {userId: usercredential._id}, 
         process.env.JWT_REFRESH_TOKEN,
         {expiresIn: "7d"}
     )
@@ -232,7 +239,7 @@ app.post('/forgotPassword', async (req, res )=>{
         await user.save();
         const reset = `http://localhost:3000/resetPassword?token=${rawToken}`
 
-        await verifyMail(user.email, reset);
+        await verifyMail(user.username, reset);
     return res.status(200).json(
         {message: "If the user exists a reset has been sent"}
     );
@@ -267,7 +274,7 @@ app.post('/resetPassword', async (req, res) => {
         user.resetToken = undefined;
         user.resetTokenExpiry = undefined;
         await user.save();
-
+        console.log('user after save:', user.resetToken, user.resetTokenExpiry);
         return res.status(200).json({message: 'Password has been reset successfully.'})
     }
     catch(error){
