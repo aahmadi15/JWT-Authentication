@@ -79,7 +79,14 @@ app.get('/login', (req, res)=>{
 })
 
 app.get('/dashboard', authenticateToken, (req, res) => {
-  res.json({ message: "Protected data", user: req.user });
+    let usercredential = req.body.username;
+    const userFind = newUser.findById(req.user)
+      if (!userFind) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+    console.log('dashboard hit, user', req.user);
+
+    return res.status(200).json({message: "Welcome", username: {usercredential}})
 });
 
 /*app.get('/posts', authenticateToken, (req, res) =>{
@@ -202,19 +209,20 @@ app.post('/register', async (req,res)=>{
         return res.status(500).json({message:"Server error"})
     }})
 
+
 function accessMyToken(usercredential){
     console.log('SECRET inside accessMyToken:', process.env.JWT_SECRET_KEY?.slice(0, 10));
     console.log('REFRESH inside accessMyToken:', process.env.JWT_REFRESH_TOKEN?.slice(0, 10));
     /*return jwt.sign({userId: usercredential, pass:passcredential}, process.env.JWT_SECRET_KEY, {expiresIn: '604800'});*/
     // Apparently this is bad practise for security purposes adding password as it can be uncoded and fetched.
-    console.log('signing for _id:', usercredential._id);
-    console.log('access token:', jwt.sign({ userId: usercredential._id }, process.env.JWT_SECRET_KEY, { expiresIn: '15m' }));
+    console.log('signing for _id:', usercredential);
+    console.log('access token:', jwt.sign({ userId: usercredential}, process.env.JWT_SECRET_KEY, { expiresIn: '15m' }));
     const accessToken = jwt.sign(
         {userId: usercredential._id},
         process.env.JWT_SECRET_KEY,
         {expiresIn: '15m' })
     const refreshToken = jwt.sign(
-        {userId: usercredential._id}, 
+        {userId: usercredential}, 
         process.env.JWT_REFRESH_TOKEN,
         {expiresIn: "7d"}
     )
@@ -271,8 +279,8 @@ app.post('/resetPassword', async (req, res) => {
 
         const salt = await bcrypt.genSalt(10);
         user.password = await bcrypt.hash(password, salt);
-        user.resetToken = undefined;
-        user.resetTokenExpiry = undefined;
+        user.resetToken = undefined; // this is done because the password has been reset 
+        user.resetTokenExpiry = undefined; // no need as the expiry was discovered in the user parameter or an error was thrown
         await user.save();
         console.log('user after save:', user.resetToken, user.resetTokenExpiry);
         return res.status(200).json({message: 'Password has been reset successfully.'})
@@ -282,6 +290,26 @@ app.post('/resetPassword', async (req, res) => {
         return res.status(500).json({message: 'something went wrong'});
     }
 })
+
+function authenticateToken(req, res, next) {
+    // 1. Read the Authorization header
+    const authHeader = req.headers['authorization']
+    
+    // 2. Extract token from "Bearer eyJ..."
+    const token = authHeader && authHeader.split(' ')[1]
+    
+    // 3. No token → reject immediately, route never runs
+    if (token == null) return res.sendStatus(401)
+    
+    // 4. Verify token signature and expiry
+    jwt.verify(token, process.env.JWT_SECRET_KEY, (err, user) => {
+        if (err) return res.sendStatus(403) // token invalid or expired
+        
+        // 5. Token valid → attach user to request and continue
+        req.user = user
+        next() // ← now the route handler runs
+    })
+}
 
 app.post('/token', (req,res) => {
     try {
@@ -315,18 +343,6 @@ app.delete('/logout', (req,res) =>{
     refreshToken = refreshToken.filter(token => token !== req.body.token)
     res.redirect('/register')
 })
-
-function authenticateToken(req,res,nex){
-    const authHeader = req.headers['authorization']
-    const token = authHeader && authHeader.split(' ')[1]
-    if (token == null) return res.sendStatus(401) //means user doesn't have access to the token in question
-    
-    jwt.verify(token, process.env.JWT_SECRET_KEY, (err, user) => {
-        if (err) return res.sendStatus(403)  // checks if token no longer valid then throws a HTTP 403 error
-        req.user = user
-        next() // move on with middleware
-    }) 
-}
 
 
 app.listen(`${process.env.PORT}`, ()=>{

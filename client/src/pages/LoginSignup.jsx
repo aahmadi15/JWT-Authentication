@@ -7,8 +7,6 @@ export default function LoginSignup () {
         
         
         const [error, setError] = useState('');
-
-        
         
         const handleOnSubmit = async (event) => {
         event.preventDefault();
@@ -24,13 +22,15 @@ try{
     })
        const data = await result.json();
        console.log(data)
-   if (!result.ok)
+    if (!result.ok)
     {
         setError(data.message)
         console.log(error)
         return;
     }    
-    setError(data.message);
+
+    localStorage.setItem('accessToken', data.accessToken);
+    window.location.href = '/dashboard'
     console.log("Login success", data)}
     
 catch(error) {
@@ -50,7 +50,7 @@ catch(error) {
               <input name='username' type="email" placeholder='username' onChange={(e)=> {setUser(e.target.value)}}/>   
                     </div>
             <div className="password">
-              <input name='password' type="password" placeholder='password'onChange={(e)=> {setPassword(e.target.value)}}/>
+              <input name='password' type="password" placeholder='password' onChange={(e)=> {setPassword(e.target.value)}}/>
               
             </div>
             <div className='errors'>
